@@ -1,5 +1,6 @@
 TITLE  = 'Kanal 5 Play'
 ART    = 'art-default.jpg'
+ICON   = 'icon-default.png'
 PREFIX = '/video/kanal5'
 
 BASE_URL        = 'http://www.kanal%splay.se'
@@ -8,11 +9,11 @@ START_URL       = API_URL + '/getMobileStartContent?format=FLASH'
 PROGRAMS_URL    = API_URL + '/getMobileFindProgramsContent'
 LIVE_EVENTS_URL = API_URL + '/live/getCurrentEvents'
 
-GetChannelThumb    = SharedCodeService.kanal5lib.GetChannelThumb
 GetShows           = SharedCodeService.kanal5lib.GetShows
 GetEpisodes        = SharedCodeService.kanal5lib.GetEpisodes
 ShowSeasons        = SharedCodeService.kanal5lib.ShowSeasons
 ProgramShowMenu    = SharedCodeService.kanal5lib.ProgramShowMenu
+Clips              = SharedCodeService.kanal5lib.Clips
 GetNoShowContainer = SharedCodeService.kanal5lib.GetNoShowContainer
 CHANNEL_LIST       = SharedCodeService.kanal5lib.CHANNEL_LIST
 
@@ -24,107 +25,64 @@ def Start():
 ####################################################################################################
 @handler(PREFIX, TITLE, art = ART)
 def MainMenu():
-    oc = ObjectContainer()
 
-    for channelNo in CHANNEL_LIST:
-        page = HTML.ElementFromURL(BASE_URL % channelNo)
-        
-        try:
-            description = unicode(page.xpath('//meta[@property="og:description"]/@content')[0])
-        except:
-            description = None
+    oc = ObjectContainer(title1 = TITLE)
 
-        thumb = GetChannelThumb(channelNo)
-            
-        title = "Kanal" + channelNo
-    
-        oc.add(
-            DirectoryObject(
-                key = 
-                    Callback(
-                        MainChannelMenu, 
-                        channelNo = channelNo,
-                        thumb = thumb
-                    ),
-                title = title,
-                summary = description,
-                thumb = thumb
-            )
-        )
-        
-    oc.add(
-        SearchDirectoryObject(
-            identifier = 'com.plexapp.plugins.kanal5play',
-            title = unicode('Sök'),
-            summary = unicode('Sök efter program och klipp på Kanal 5/9/11 Play'),
-            prompt = unicode('Sök på Kanal 5/9/11 Play'),
-            thumb = R('ikon-sok.png')
-        )
-    ) 
-    
-    return oc
-
-####################################################################################################
-@route(PREFIX + '/mainchannelmenu')
-def MainChannelMenu(channelNo, thumb):
-    oc = ObjectContainer(title1 = "Kanal" + channelNo)
-    
-    oc.add(
-        DirectoryObject(
-            key =
-                Callback(
-                    PopularShows,
-                    channelNo = channelNo
-                ),
+    oc.add(DirectoryObject(
+            key   = Callback(PopularShows, title=unicode("Populära program")),
             title = unicode("Populära program"),
-            thumb = thumb
-        )
-    )
+            thumb = R(ICON)
+            )
+           )
     
-    oc.add(
-        DirectoryObject(
-            key =
-                Callback(
-                    LatestVideos,
-                    channelNo = channelNo
-                ),
+    oc.add(DirectoryObject(
+            key   = Callback(LatestVideos, title=unicode("Senast tillagt")),
             title = unicode("Senast tillagt"),
-            thumb = thumb
-        )
-    )
+            thumb = R(ICON)
+            )
+           )
     
-    oc.add(
-        DirectoryObject(
-            key =
-                Callback(
-                    AllShows,
-                    channelNo = channelNo
-                ),
+    oc.add(DirectoryObject(
+            key   = Callback(AllShows, title=unicode("Alla program")),
             title = unicode("Alla program"),
-            thumb = thumb
-        )
-    )
+            thumb = R(ICON)
+            )
+           )
     
-    oc.add(
-        DirectoryObject(
-            key =
-                Callback(
-                    Live,
-                    channelNo = channelNo
-                ),
+    oc.add(DirectoryObject(
+            key   = Callback(Live, title=unicode("Live")),
             title = unicode("Live"),
-            thumb = thumb
-        )
-    )
-    
+            thumb = R(ICON)
+            )
+           )
+
+    oc.add(SearchDirectoryObject(
+            identifier = 'com.plexapp.plugins.kanal5play',
+            title      = unicode('Sök'),
+            summary    = unicode('Sök efter program och klipp på Kanal 5/9/11 Play'),
+            prompt     = unicode('Sök på Kanal 5/9/11 Play'),
+            thumb      = R('ikon-sok.png')
+            )
+           )
     return oc
 
 ####################################################################################################
 @route(PREFIX + '/live')
-def Live(channelNo):
-    oc   = ObjectContainer(title2 = "Live")
+def Live(title):
+    oc   = ObjectContainer(title2 = unicode(title))
+
+    for channelNo in CHANNEL_LIST:
+        oc = AddLiveShows(oc, channelNo)
+
+    if len(oc) < 1:
+        oc = GetNoShowContainer(oc)
+
+    return oc
+
+def AddLiveShows(oc, channelNo):
+
     data = JSON.ObjectFromURL(LIVE_EVENTS_URL % channelNo, cacheTime = 0)
-    
+
     for event in data['liveEvents']:
         if 'liveStreamingParams' in event:
             oc.add(
@@ -136,51 +94,59 @@ def Live(channelNo):
                 )
             )
 
-    if len(oc) < 1:
-        oc = GetNoShowContainer(oc)
-        oc.message = unicode('Inga Live events tillgängliga för tillfället') 
-       
     return oc 
 
 ####################################################################################################
 @route(PREFIX + '/popularshows')
-def PopularShows(channelNo):
-    oc   = ObjectContainer(title1 = unicode("Populära program"))
-    data = JSON.ObjectFromURL(START_URL % channelNo)
+def PopularShows(title):
+    oc   = ObjectContainer(title2 = unicode(title))
 
-    oc = GetShows(oc, data['hottestPrograms'], channelNo)
+    for channelNo in CHANNEL_LIST:
+        oc = AddPopularShows(oc, channelNo, len(oc) > 0)
 
     if len(oc) < 1:
         oc = GetNoShowContainer(oc)
-       
-    return oc 
+
+    return oc
+
+def AddPopularShows(oc, channelNo, checkDuplicates):
+    data = JSON.ObjectFromURL(START_URL % channelNo)
+    return GetShows(oc, data['hottestPrograms'], channelNo, checkDuplicates)
 
 ####################################################################################################
 @route(PREFIX + '/latestvideos')
-def LatestVideos(channelNo):
-    oc   = ObjectContainer(title1 = unicode("Senast tillagt"))
+def LatestVideos(title):
+
+    oc  = ObjectContainer(title2=unicode(title))
+
+    for channelNo in CHANNEL_LIST:
+        oc = AddLatestVideos(oc, channelNo)
+
+    return oc
+
+def AddLatestVideos(oc, channelNo):
     data = JSON.ObjectFromURL(START_URL % channelNo)
 
-    oc = GetEpisodes(oc, data['newEpisodeVideos'], channelNo)
-    
-    if len(oc) < 1:
-        oc = GetNoShowContainer(oc)
-       
-    return oc 
+    return GetEpisodes(oc, data['newEpisodeVideos'], channelNo, sort='latest')
 
 ####################################################################################################
 @route(PREFIX + '/shows')
-def AllShows(channelNo):
+def AllShows(title):
 
-    oc   = ObjectContainer(title1 = "Kanal" + channelNo)
-    data = JSON.ObjectFromURL(PROGRAMS_URL % channelNo)
-
-    oc = GetShows(oc, data['programsWithTemperatures'], channelNo)
+    oc = ObjectContainer(title2=unicode(title))
+    for channelNo in CHANNEL_LIST:
+        oc = AddShows(oc, channelNo, len(oc) > 0)
 
     if len(oc) < 1:
         oc = GetNoShowContainer(oc)
-        
+    else:
+        oc.objects.sort(key = lambda obj: obj.title)
+
     return oc
+
+def AddShows(oc, channelNo, checkDuplicates):
+    data = JSON.ObjectFromURL(PROGRAMS_URL % channelNo)
+    return GetShows(oc, data['programsWithTemperatures'], channelNo, checkDuplicates)
 
 ####################################################################################################
 @route(PREFIX + '/createvideoclipobject')
