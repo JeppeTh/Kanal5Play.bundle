@@ -1,6 +1,8 @@
 from kanal5lib import ShowSeasons as ShowSeasons
 from kanal5lib import ProgramShowMenu as ProgramShowMenu
+from kanal5lib import Clips as Clips
 from kanal5lib import CHANNEL_LIST as CHANNEL_LIST
+from kanal5lib import SOURCE_TITLE as SOURCE_TITLE
 
 BASE_URL      = 'http://www.kanal%splay.se'
 
@@ -53,7 +55,7 @@ def decode_results(results, channelNo, oc, query):
         date = Datetime.ParseDate(show['publishDate']).date()
         url = VIDEO_PAGE_URL % (channelNo, show['link'])
         FOUND_SHOWS.append(title)
-        oc.add(TVShowObject(key=Callback(ShowSeasons, title=title, channelNo=channelNo, show_id=show['id'], show_title=title, summary=None,thumb=thumb), title=title, originally_available_at=date, thumb=thumb, rating_key=show['id']))
+        oc.add(TVShowObject(key=Callback(ShowSeasons, title=title, channelNo=channelNo, show_id=show['id'], show_title=title, summary=None,thumb=thumb), title=title, source_title = SOURCE_TITLE % channelNo, originally_available_at=date, thumb=thumb,rating_key=show['id']))
 
     if len(query) == 1:
         # In case query single character - only return shows starting with it
@@ -79,6 +81,6 @@ def decode_results(results, channelNo, oc, query):
         episode = int(video['videoEpisode'])
         show = video['programName']
         FOUND_EPISODES.append(title)
-        oc.add(EpisodeObject(url=url, title=title, summary=summary, show=show, index=episode, season=season, duration=duration, originally_available_at=date, thumb=thumb))
+        oc.add(EpisodeObject(url=url, title=title, source_title = SOURCE_TITLE % channelNo, summary=summary, show=show, index=episode, season=season, duration=duration, originally_available_at=date, thumb=thumb))
  
     return oc

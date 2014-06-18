@@ -13,14 +13,20 @@ VIDEO_URL       = BASE_URL + '/play/program/%s/video/%s'
 NO_PROGRAMS_FOUND_HEADER  = "Inga program funna"
 NO_PROGRAMS_FOUND_MESSAGE = unicode("Kunde ej hitta några program.")
 
+SOURCE_TITLE = "Kanal %s"
+
 ####################################################################################################
-def GetShows(oc, showList, channelNo):
+def GetShows(oc, showList, channelNo, checkDuplicates=False):
     for show in showList:
         if 'program' in show:
             show = show['program']
         
         if not show['premium'] and int(show['playableEpisodesCount']) > 0: 
             title = unicode(show['name'])
+
+            if checkDuplicates:
+                if IsDuplicate(title, oc):
+                    continue
 
             summary = unicode(show['description']) if 'description' in show else None
             show_id = str(show['id'])
@@ -34,7 +40,7 @@ def GetShows(oc, showList, channelNo):
                     thumb = GetChannelThumb(channelNo)
 
             oc.add(
-                DirectoryObject(
+                TVShowObject(
                     key = 
                         Callback(
                             ShowSeasons,
@@ -45,12 +51,15 @@ def GetShows(oc, showList, channelNo):
                             summary = summary,
                             thumb = thumb
                         ),
+                    rating_key=show['id'],
                     title = title,
+                    source_title = SOURCE_TITLE % channelNo,
                     summary = summary,
-                    thumb = thumb
+                    thumb = thumb,
+                    episode_count = int(show['playableEpisodesCount'])
                 )
             )
-        
+
     return oc
 
 ####################################################################################################
@@ -69,7 +78,7 @@ def ShowSeasons(title, channelNo, show_id, show_title, summary, thumb):
             for season in show['seasonNumbersWithContent']:
                 dir_title = unicode(show_title + " - " + ("Säsong %s" % season))
                 oc.add(
-                    DirectoryObject(
+                    SeasonObject(
                         key = 
                             Callback(
                                 ProgramShowMenu,
@@ -79,7 +88,9 @@ def ShowSeasons(title, channelNo, show_id, show_title, summary, thumb):
                                 show_title = title,
                                 seasonNo = season
                             ),
+                        index = int(season),
                         title = unicode("Säsong " + str(season)),
+                        show  = show_title,
                         summary = summary,
                         thumb = thumb
                     )
@@ -107,14 +118,13 @@ def ProgramShowMenu(title, channelNo, show_id, show_title, seasonNo):
     data_url = VIDEO_LIST_URL % (channelNo, show_id, seasonNo)
     results  = JSON.ObjectFromURL(data_url)
 
-    oc = GetEpisodes(oc, results["episodes"], channelNo, seasonNo)
-
-    oc.objects.sort(key = lambda obj: obj.index, reverse = True)
+    oc = GetEpisodes(oc, results["episodes"], channelNo, sort='oldest', seasonNo=seasonNo)
     return oc
 
 ####################################################################################################
-def GetEpisodes(oc, episodeList, channelNo, seasonNo=None):
+def GetEpisodes(oc, episodeList, channelNo, sort='oldest', seasonNo=None, filterClips=True):
     widevine = False
+    clip_list = []
 
     for video in episodeList:
         if video['premium']:
@@ -146,6 +156,14 @@ def GetEpisodes(oc, episodeList, channelNo, seasonNo=None):
         if seasonNo and not season == seasonNo:
             continue # can this happen?
 
+        if not seasonNo:
+            if IsDuplicate(title, oc):
+                continue
+
+        if filterClips and video['type'] != 'TVTV_EPISODE' and video['type'] != 'WEB_EPISODE':
+            clip_list.append(video)
+            continue
+            
         try:
             airdate = Datetime.FromTimestamp(int(video['shownOnTvDateTimestamp'])/1000)
         except: 
@@ -156,10 +174,15 @@ def GetEpisodes(oc, episodeList, channelNo, seasonNo=None):
         show_id  = video['program']['id']
         url      = VIDEO_URL % (channelNo, show_id, video_id)
 
+        source_title = None
+        if sort == 'latest':
+            source_title = SOURCE_TITLE % channelNo
+
         oc.add(
             EpisodeObject(
                 url = url,
                 title = title,
+                source_title = source_title,
                 summary = summary,
                 show = show_title,
                 duration = duration, 
@@ -170,12 +193,42 @@ def GetEpisodes(oc, episodeList, channelNo, seasonNo=None):
             )
         )
 
+    if sort != 'nosort':
+        sortOnAirData(oc, sort == 'latest')
+
+    if len(clip_list) > 0:
+        new_oc = ObjectContainer(title2=oc.title2)
+        new_oc.add(CreateDirObject("Klipp",
+                                   Callback(Clips,
+                                            title        = oc.title2 + " - Klipp",
+                                            clip_list    = clip_list,
+                                            channelNo    = channelNo,
+                                            sort         = sort,
+                                            seasonNo     = seasonNo
+                                            ),
+                                   GetChannelThumb(channelNo)
+                                   ))
+        for ep in oc.objects:
+            new_oc.add(ep)
+        return new_oc
+
     if len(oc) < 1:
         oc = GetNoShowContainer(oc, widevine)
 
     return oc
 
 ####################################################################################################
+# @route(PREFIX + '/Clips', clip_list=list, seasonNo=int)
+def Clips(title, clip_list, channelNo, sort, seasonNo):
+    oc = ObjectContainer(title2=unicode(title))
+    return GetEpisodes(oc, clip_list, channelNo, sort, seasonNo, filterClips=False)
+
+def IsDuplicate(title, oc):
+    for o in oc.objects:
+        if title == o.title:
+            return True
+    return False
+
 def GetChannelThumb(channelNo):
     if channelNo == '5':
         return R('icon-kanal5.png')
@@ -191,3 +244,22 @@ def GetNoShowContainer(oc, widevine=False):
     if widevine:
         oc.message = oc.message + unicode('\r\nProgrammet kan ej visas pga rättighetsskäl\r\n')
     return oc
+
+def CreateDirObject(name, key, thumb, summary=None):
+    myDir         = DirectoryObject()
+    myDir.title   = name
+    myDir.key     = key
+    myDir.summary = summary
+    myDir.thumb   = thumb
+    myDir.art     = R(ART)
+    return myDir
+
+def sortOnAirData(Objects, reverse=False):
+    for obj in Objects.objects:
+        if obj.originally_available_at == None:
+            # Assume given Objects already are reversed
+            if reverse:
+                return Objects
+            else:
+                return Objects.objects.reverse()
+    return Objects.objects.sort(key=lambda obj: (obj.originally_available_at,obj.title), reverse=reverse)
