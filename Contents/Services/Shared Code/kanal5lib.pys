@@ -13,6 +13,8 @@ VIDEO_URL       = BASE_URL + '/play/program/%s/video/%s'
 NO_PROGRAMS_FOUND_HEADER  = "Inga program funna"
 NO_PROGRAMS_FOUND_MESSAGE = unicode("Kunde ej hitta några program.")
 
+SOURCE_TITLE = "Kanal %s"
+
 ####################################################################################################
 def GetShows(oc, showList, channelNo):
     for show in showList:
@@ -69,7 +71,7 @@ def ShowSeasons(title, channelNo, show_id, show_title, summary, thumb):
             for season in show['seasonNumbersWithContent']:
                 dir_title = unicode(show_title + " - " + ("Säsong %s" % season))
                 oc.add(
-                    DirectoryObject(
+                    SeasonObject(
                         key = 
                             Callback(
                                 ProgramShowMenu,
@@ -79,7 +81,9 @@ def ShowSeasons(title, channelNo, show_id, show_title, summary, thumb):
                                 show_title = title,
                                 seasonNo = season
                             ),
+                        index = int(season),
                         title = unicode("Säsong " + str(season)),
+                        show  = show_title,
                         summary = summary,
                         thumb = thumb
                     )
