@@ -55,8 +55,9 @@ def GetShows(oc, showList, channelNo, checkDuplicates=False):
                     title = title,
                     source_title = SOURCE_TITLE % channelNo,
                     summary = summary,
-                    thumb = thumb,
-                    episode_count = int(show['playableEpisodesCount'])
+                    thumb = thumb# ,
+                    # Seem Plex Client can't handle episode_count
+                    # episode_count = int(show['playableEpisodesCount'])
                 )
             )
 

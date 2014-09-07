@@ -127,7 +127,7 @@ def LatestVideos(title):
 def AddLatestVideos(oc, channelNo):
     data = JSON.ObjectFromURL(START_URL % channelNo)
 
-    return GetEpisodes(oc, data['newEpisodeVideos'], channelNo, sort='latest')
+    return GetEpisodes(oc, data['newEpisodeVideos'], channelNo, sort='latest', filterClips=False)
 
 ####################################################################################################
 @route(PREFIX + '/shows')
